@@ -10,6 +10,7 @@
 package test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bucket-sailor/writablefs"
@@ -211,6 +212,47 @@ func testXAttrs(t *testing.T, fsys writablefs.FS) {
 			require.NoError(t, err)
 
 			assert.Equal(t, attrValue, retrievedValue)
+		})
+
+		t.Run("Nonalphanumeric Attribute Names", func(t *testing.T) {
+			xattrs, err := setupXAttrs()
+			require.NoError(t, err)
+
+			// Define a set of test attributes with non-alphanumeric names.
+			testAttrs := map[string][]byte{
+				"test.attr":      []byte("value1"),
+				"attr#2":         []byte("value2"),
+				"another_attr$":  []byte("value3"),
+				"$special%&":     []byte("value4"),
+				"attr-with-dash": []byte("value5"),
+				".startingDot":   []byte("value6"),
+				"endingDot.":     []byte("value7"),
+				"_underscore":    []byte("value8"),
+			}
+
+			// Set each attribute.
+			for name, value := range testAttrs {
+				require.NoError(t, xattrs.Set(name, value), "Failed to set attribute with non-alphanumeric name")
+			}
+
+			// Commit the attribute changes.
+			require.NoError(t, xattrs.Sync())
+
+			// Retrieve and check each attribute.
+			for name, expectedValue := range testAttrs {
+				retrievedValue, err := xattrs.Get(name)
+				require.NoError(t, err, "Failed to get attribute with name %s", name)
+
+				assert.Equal(t, expectedValue, retrievedValue)
+			}
+
+			// Validate the complete list of attributes.
+			names, err := xattrs.List()
+			require.NoError(t, err)
+
+			for name := range testAttrs {
+				assert.Contains(t, names, strings.ToLower(name))
+			}
 		})
 	})
 }

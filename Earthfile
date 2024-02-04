@@ -19,7 +19,7 @@ test:
   RUN go mod download
   COPY . .
   WITH DOCKER
-    RUN go test -coverprofile=coverage.out -v ./...
+    RUN go test -timeout=5m -coverprofile=coverage.out -v ./...
   END
   SAVE ARTIFACT ./coverage.out AS LOCAL coverage.out
 

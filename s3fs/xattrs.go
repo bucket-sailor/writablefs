@@ -70,6 +70,8 @@ func (a *s3Attrs) Get(name string) ([]byte, error) {
 }
 
 func (a *s3Attrs) Set(name string, data []byte) error {
+	name = strings.ToLower(name)
+
 	a.fsys.logger.Debug("Setting extended attribute", "key", a.handle.file.key, "name", name)
 
 	if a.handle.readOnly {
@@ -78,7 +80,7 @@ func (a *s3Attrs) Set(name string, data []byte) error {
 
 	a.changesMu.Lock()
 	a.changes[name] = attrChange{
-		name:  strings.ToLower(name),
+		name:  name,
 		value: string(data),
 	}
 	a.changesMu.Unlock()
@@ -87,6 +89,8 @@ func (a *s3Attrs) Set(name string, data []byte) error {
 }
 
 func (a *s3Attrs) Remove(name string) error {
+	name = strings.ToLower(name)
+
 	a.fsys.logger.Debug("Removing extended attribute", "key", a.handle.file.key, "name", name)
 
 	if a.handle.readOnly {
@@ -95,7 +99,7 @@ func (a *s3Attrs) Remove(name string) error {
 
 	a.changesMu.Lock()
 	a.changes[name] = attrChange{
-		name:   strings.ToLower(name),
+		name:   name,
 		remove: true,
 	}
 	a.changesMu.Unlock()

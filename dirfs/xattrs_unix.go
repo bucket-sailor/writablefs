@@ -25,7 +25,7 @@ type fileAttrs struct {
 }
 
 func (a *fileAttrs) Get(name string) ([]byte, error) {
-	data, err := xattr.FGet(a.File, "user."+name)
+	data, err := xattr.FGet(a.File, "user."+strings.ToLower(name))
 	if err != nil {
 		if errors.Is(err, xattr.ENOATTR) {
 			return nil, writablefs.ErrNoSuchAttr
@@ -38,11 +38,11 @@ func (a *fileAttrs) Get(name string) ([]byte, error) {
 }
 
 func (a *fileAttrs) Set(name string, data []byte) error {
-	return xattr.FSet(a.File, "user."+name, data)
+	return xattr.FSet(a.File, "user."+strings.ToLower(name), data)
 }
 
 func (a *fileAttrs) Remove(name string) error {
-	if err := xattr.FRemove(a.File, "user."+name); err != nil {
+	if err := xattr.FRemove(a.File, "user."+strings.ToLower(name)); err != nil {
 		if errors.Is(err, xattr.ENOATTR) {
 			return nil
 		}
@@ -62,7 +62,7 @@ func (a *fileAttrs) List() ([]string, error) {
 	var userAttrNames []string
 	for _, name := range names {
 		if strings.HasPrefix(name, "user.") {
-			userAttrNames = append(userAttrNames, strings.TrimPrefix(name, "user."))
+			userAttrNames = append(userAttrNames, strings.ToLower(strings.TrimPrefix(name, "user.")))
 		}
 	}
 
