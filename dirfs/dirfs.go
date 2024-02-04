@@ -128,7 +128,30 @@ type fileXattr struct {
 	*os.File
 }
 
-func (f *fileXattr) Get(name string) ([]byte, error)    { return xattr.FGet(f.File, name) }
-func (f *fileXattr) Set(name string, data []byte) error { return xattr.FSet(f.File, name, data) }
-func (f *fileXattr) Remove(name string) error           { return xattr.FRemove(f.File, name) }
-func (f *fileXattr) List() ([]string, error)            { return xattr.FList(f.File) }
+func (f *fileXattr) Get(name string) ([]byte, error) {
+	return xattr.FGet(f.File, "user."+name)
+}
+
+func (f *fileXattr) Set(name string, data []byte) error {
+	return xattr.FSet(f.File, "user."+name, data)
+}
+
+func (f *fileXattr) Remove(name string) error {
+	return xattr.FRemove(f.File, "user."+name)
+}
+
+func (f *fileXattr) List() ([]string, error) {
+	names, err := xattr.FList(f.File)
+	if err != nil {
+		return nil, err
+	}
+
+	var userNames []string
+	for _, name := range names {
+		if strings.HasPrefix(name, "user.") {
+			userNames = append(userNames, strings.TrimPrefix(name, "user."))
+		}
+	}
+
+	return userNames, nil
+}
