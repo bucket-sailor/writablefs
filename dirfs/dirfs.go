@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/bucket-sailor/writablefs"
+	"github.com/pkg/xattr"
 )
 
 type dirFS string
@@ -44,7 +45,12 @@ func (fsys dirFS) OpenFile(name string, flag writablefs.FileOpenFlag) (writablef
 		return nil, err
 	}
 
-	return os.OpenFile(path, int(flag), 0o644)
+	f, err := os.OpenFile(path, int(flag), 0o644)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileWithMetadata{f}, nil
 }
 
 func (fsys dirFS) MkdirAll(name string) error {
@@ -109,3 +115,22 @@ func (fsys dirFS) safePath(path string) (string, error) {
 
 	return absPath, nil
 }
+
+// Add support for unix extended attributes.
+type fileWithMetadata struct {
+	*os.File
+}
+
+func (f *fileWithMetadata) Metadata() writablefs.FileMetadata {
+	return &unixMetadata{f: f.File}
+}
+
+type unixMetadata struct {
+	f *os.File
+}
+
+func (m *unixMetadata) Get(name string) ([]byte, error)    { return xattr.FGet(m.f, name) }
+func (m *unixMetadata) Set(name string, data []byte) error { return xattr.FSet(m.f, name, data) }
+func (m *unixMetadata) Remove(name string) error           { return xattr.FRemove(m.f, name) }
+func (m *unixMetadata) List() ([]string, error)            { return xattr.FList(m.f) }
+func (m *unixMetadata) Sync() error                        { return m.f.Sync() }
