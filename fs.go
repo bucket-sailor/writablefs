@@ -49,6 +49,20 @@ func (f FileOpenFlag) IsSet(flag FileOpenFlag) bool { return f&flag != 0 }
 // This is kept for compatibility with io/fs.
 type FileReadOnly = gofs.File
 
+// FileExtendedAttributes is an interface for working with file extended attributes.
+type FileExtendedAttributes interface {
+	// Get returns the value of the extended attribute identified by name.
+	Get(name string) ([]byte, error)
+	// Set sets the value of the extended attribute identified by name.
+	Set(name string, data []byte) error
+	// Remove removes the extended attribute identified by name.
+	Remove(name string) error
+	// List returns the names of all extended attributes associated with the file.
+	List() ([]string, error)
+	// Sync flushes any metadata changes to the file system.
+	Sync() error
+}
+
 // File is the interface implemented by a writeable file.
 type File interface {
 	FileReadOnly
@@ -58,6 +72,7 @@ type File interface {
 	io.WriterAt
 	Sync() error
 	Truncate(size int64) error
+	ExtendedAttributes() FileExtendedAttributes
 }
 
 // FS is the interface implemented by a writeable file system.

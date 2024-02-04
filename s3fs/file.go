@@ -392,3 +392,9 @@ func (h *fileHandle) Truncate(size int64) error {
 
 	return h.file.Truncate(size)
 }
+
+func (h *fileHandle) ExtendedAttributes() writablefs.FileExtendedAttributes {
+	// TODO: implement extended attributes via S3 object metadata.
+
+	return nil
+}

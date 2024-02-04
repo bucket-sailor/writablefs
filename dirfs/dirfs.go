@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/bucket-sailor/writablefs"
+	"github.com/pkg/xattr"
 )
 
 type dirFS string
@@ -44,7 +45,12 @@ func (fsys dirFS) OpenFile(name string, flag writablefs.FileOpenFlag) (writablef
 		return nil, err
 	}
 
-	return os.OpenFile(path, int(flag), 0o644)
+	f, err := os.OpenFile(path, int(flag), 0o644)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileWithExtendedAttributes{f}, nil
 }
 
 func (fsys dirFS) MkdirAll(name string) error {
@@ -109,3 +115,20 @@ func (fsys dirFS) safePath(path string) (string, error) {
 
 	return absPath, nil
 }
+
+type fileWithExtendedAttributes struct {
+	*os.File
+}
+
+func (f *fileWithExtendedAttributes) ExtendedAttributes() writablefs.FileExtendedAttributes {
+	return &fileXattr{f.File}
+}
+
+type fileXattr struct {
+	*os.File
+}
+
+func (f *fileXattr) Get(name string) ([]byte, error)    { return xattr.FGet(f.File, name) }
+func (f *fileXattr) Set(name string, data []byte) error { return xattr.FSet(f.File, name, data) }
+func (f *fileXattr) Remove(name string) error           { return xattr.FRemove(f.File, name) }
+func (f *fileXattr) List() ([]string, error)            { return xattr.FList(f.File) }
