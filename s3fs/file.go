@@ -36,7 +36,7 @@ type file struct {
 	// The staging file for writing to (if any).
 	stagingFile writablefs.File
 	// Are there any staged changes?
-	modified bool
+	dirty bool
 	// The file handles that are currently open.
 	handles map[*fileHandle]struct{}
 }
@@ -91,7 +91,7 @@ func (f *file) Close() error {
 
 	lastClose := len(f.handles) == 0
 	if lastClose {
-		if f.modified {
+		if f.dirty {
 			f.mu.Unlock()
 			err := f.Sync()
 			f.mu.Lock()
@@ -130,7 +130,7 @@ func (f *file) WriteAt(p []byte, off int64) (int, error) {
 	}
 
 	if n > 0 {
-		f.modified = true
+		f.dirty = true
 	}
 
 	return n, nil
@@ -164,7 +164,7 @@ func (f *file) Sync() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.modified {
+	if f.dirty {
 		f.fsys.logger.Debug("Uploading modified object", "key", f.key)
 
 		if _, err := f.stagingFile.Seek(0, io.SeekStart); err != nil {
@@ -187,7 +187,7 @@ func (f *file) Sync() error {
 			return err
 		}
 
-		f.modified = false
+		f.dirty = false
 	}
 
 	// TODO: we should also check if the remote object has been modified and
@@ -208,7 +208,7 @@ func (f *file) Truncate(size int64) error {
 		}
 	}
 
-	f.modified = true
+	f.dirty = true
 
 	return nil
 }
@@ -393,8 +393,6 @@ func (h *fileHandle) Truncate(size int64) error {
 	return h.file.Truncate(size)
 }
 
-func (h *fileHandle) ExtendedAttributes() writablefs.FileExtendedAttributes {
-	// TODO: implement extended attributes via S3 object metadata.
-
-	return nil
+func (h *fileHandle) XAttrs() (writablefs.ExtendedAttributes, error) {
+	return newS3Attrs(h.fsys, h)
 }

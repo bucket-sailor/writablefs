@@ -10,17 +10,19 @@
 package writablefs
 
 import (
+	"fmt"
 	"io"
 	gofs "io/fs"
 	"os"
 )
 
 var (
-	ErrInvalid    = gofs.ErrInvalid    // "invalid argument"
-	ErrPermission = gofs.ErrPermission // "permission denied"
-	ErrExist      = gofs.ErrExist      // "file already exists"
-	ErrNotExist   = gofs.ErrNotExist   // "file does not exist"
-	ErrClosed     = gofs.ErrClosed     // "file already closed"
+	ErrInvalid    = gofs.ErrInvalid                 // "invalid argument"
+	ErrPermission = gofs.ErrPermission              // "permission denied"
+	ErrExist      = gofs.ErrExist                   // "file already exists"
+	ErrNotExist   = gofs.ErrNotExist                // "file does not exist"
+	ErrClosed     = gofs.ErrClosed                  // "file already closed"
+	ErrNoSuchAttr = fmt.Errorf("no such attribute") // "no such attribute"
 )
 
 type FileMode = gofs.FileMode
@@ -49,8 +51,8 @@ func (f FileOpenFlag) IsSet(flag FileOpenFlag) bool { return f&flag != 0 }
 // This is kept for compatibility with io/fs.
 type FileReadOnly = gofs.File
 
-// FileExtendedAttributes is an interface for working with file extended attributes.
-type FileExtendedAttributes interface {
+// ExtendedAttributes is an interface for working with file extended attributes.
+type ExtendedAttributes interface {
 	// Get returns the value of the extended attribute identified by name.
 	Get(name string) ([]byte, error)
 	// Set sets the value of the extended attribute identified by name.
@@ -72,7 +74,7 @@ type File interface {
 	io.WriterAt
 	Sync() error
 	Truncate(size int64) error
-	ExtendedAttributes() FileExtendedAttributes
+	XAttrs() (ExtendedAttributes, error)
 }
 
 // FS is the interface implemented by a writeable file system.

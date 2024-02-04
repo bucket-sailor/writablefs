@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/bucket-sailor/writablefs"
-	"github.com/pkg/xattr"
 )
 
 type dirFS string
@@ -50,7 +49,7 @@ func (fsys dirFS) OpenFile(name string, flag writablefs.FileOpenFlag) (writablef
 		return nil, err
 	}
 
-	return &fileWithExtendedAttributes{f}, nil
+	return &fileWithXAttrs{f}, nil
 }
 
 func (fsys dirFS) MkdirAll(name string) error {
@@ -116,42 +115,10 @@ func (fsys dirFS) safePath(path string) (string, error) {
 	return absPath, nil
 }
 
-type fileWithExtendedAttributes struct {
+type fileWithXAttrs struct {
 	*os.File
 }
 
-func (f *fileWithExtendedAttributes) ExtendedAttributes() writablefs.FileExtendedAttributes {
-	return &fileXattr{f.File}
-}
-
-type fileXattr struct {
-	*os.File
-}
-
-func (f *fileXattr) Get(name string) ([]byte, error) {
-	return xattr.FGet(f.File, "user."+name)
-}
-
-func (f *fileXattr) Set(name string, data []byte) error {
-	return xattr.FSet(f.File, "user."+name, data)
-}
-
-func (f *fileXattr) Remove(name string) error {
-	return xattr.FRemove(f.File, "user."+name)
-}
-
-func (f *fileXattr) List() ([]string, error) {
-	names, err := xattr.FList(f.File)
-	if err != nil {
-		return nil, err
-	}
-
-	var userNames []string
-	for _, name := range names {
-		if strings.HasPrefix(name, "user.") {
-			userNames = append(userNames, strings.TrimPrefix(name, "user."))
-		}
-	}
-
-	return userNames, nil
+func (f *fileWithXAttrs) XAttrs() (writablefs.ExtendedAttributes, error) {
+	return &fileAttrs{f.File}, nil
 }
