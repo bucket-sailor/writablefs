@@ -10,19 +10,16 @@
 package s3fs
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	gopath "path"
-	"sort"
 	"strings"
 	"sync"
 
@@ -407,113 +404,6 @@ func (fsys *s3FS) Stat(path string) (writablefs.FileInfo, error) {
 	return &fileInfo{
 		info: info,
 	}, nil
-}
-
-func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
-	key := toKey(name, true)
-
-	fsys.logger.Debug("Archiving directory", "key", key)
-
-	pr, pw := io.Pipe()
-	go func() {
-		defer pw.Close()
-
-		tw := tar.NewWriter(pw)
-		defer tw.Close()
-
-		ctx, cancel := context.WithCancel(fsys.ctx)
-		defer cancel()
-
-		objCh := fsys.client.ListObjects(ctx, fsys.bucketName, minio.ListObjectsOptions{
-			Prefix:    key,
-			Recursive: true,
-		})
-
-		directories := make(map[string]bool)
-		objects := make(map[string]minio.ObjectInfo)
-
-		for obj := range objCh {
-			if obj.Err != nil {
-				pw.CloseWithError(obj.Err)
-				return
-			}
-
-			// Skip the directory itself (not all S3 implementations will return it).
-			if obj.Key == key {
-				continue
-			}
-
-			// Collect directories.
-			if strings.HasSuffix(obj.Key, "/") {
-				directories[strings.TrimSuffix(strings.TrimPrefix(obj.Key, key), "/")] = true
-				continue
-			}
-
-			dir := gopath.Dir(strings.TrimPrefix(obj.Key, key))
-			for dir != "." && dir != "/" && !directories[dir] {
-				directories[dir] = true
-				dir = gopath.Dir(dir)
-			}
-
-			objects[strings.TrimPrefix(obj.Key, key)] = obj
-		}
-
-		var paths []string
-		for dir := range directories {
-			paths = append(paths, dir)
-		}
-		for path := range objects {
-			paths = append(paths, path)
-		}
-
-		// Sort the paths so that we create the directories in the correct order.
-		// This is important because we can't create a file in a directory that doesn't exist.
-		sort.Strings(paths)
-
-		for _, path := range paths {
-			if directories[path] {
-				header := &tar.Header{
-					Name:     path,
-					Typeflag: tar.TypeDir,
-					Mode:     0o755,
-				}
-
-				if err := tw.WriteHeader(header); err != nil {
-					pw.CloseWithError(err)
-					return
-				}
-
-				continue
-			}
-
-			obj := objects[path]
-			rc, err := fsys.client.GetObject(fsys.ctx, fsys.bucketName, obj.Key, minio.GetObjectOptions{})
-			if err != nil {
-				pw.CloseWithError(err)
-				return
-			}
-			defer rc.Close()
-
-			header := &tar.Header{
-				Name:    path,
-				Size:    obj.Size,
-				ModTime: obj.LastModified,
-				Mode:    0o644,
-			}
-
-			if err := tw.WriteHeader(header); err != nil {
-				pw.CloseWithError(err)
-				return
-			}
-
-			if _, err := io.Copy(tw, rc); err != nil {
-				pw.CloseWithError(err)
-				return
-			}
-		}
-	}()
-
-	return pr, nil
 }
 
 func parentKey(key string) string {

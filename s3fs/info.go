@@ -52,7 +52,7 @@ type fileInfo struct {
 }
 
 func (fi *fileInfo) Name() string {
-	return filepath.Base(strings.TrimSuffix(fi.info.Key, "/"))
+	return filepath.Base(fi.info.Key)
 }
 
 func (fi *fileInfo) Size() int64 {
