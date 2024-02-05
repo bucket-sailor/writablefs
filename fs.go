@@ -97,3 +97,11 @@ type FS interface {
 	// Rename renames (moves) oldpath to newpath.
 	Rename(oldPath, newPath string) error
 }
+
+// ArchiveFS is the interface implemented by a file system that can create tarballs.
+// This useful for dowloading whole directories etc.
+type ArchiveFS interface {
+	FS
+	// Archive creates a tarball of the file or directory at the given path.
+	Archive(path string) (io.ReadCloser, error)
+}

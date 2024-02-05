@@ -50,6 +50,7 @@ func TestFilesystems(t *testing.T) {
 		// Test the filesystem
 		testBasicOperations(t, fsys)
 		testXAttrs(t, fsys)
+		testDirectoryArchive(t, fsys)
 	})
 
 	t.Run("S3 - SeaweedFS", func(t *testing.T) {
@@ -69,6 +70,7 @@ func TestFilesystems(t *testing.T) {
 		// Test the filesystem
 		testBasicOperations(t, fsys)
 		testXAttrs(t, fsys)
+		testDirectoryArchive(t, fsys)
 	})
 }
 

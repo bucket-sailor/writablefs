@@ -10,6 +10,8 @@
 package dirfs
 
 import (
+	"archive/tar"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +102,60 @@ func (fsys dirFS) Stat(name string) (writablefs.FileInfo, error) {
 	}
 
 	return os.Stat(path)
+}
+
+func (fsys dirFS) Archive(name string) (io.ReadCloser, error) {
+	path, err := fsys.safePath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+
+		tw := tar.NewWriter(pw)
+		defer tw.Close()
+
+		err := filepath.Walk(path, func(file string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			header, err := tar.FileInfoHeader(fi, "")
+			if err != nil {
+				return err
+			}
+
+			header.Name, err = filepath.Rel(path, file)
+			if err != nil {
+				return err
+			}
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if !fi.IsDir() {
+				f, err := os.Open(file)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				if _, err := io.Copy(tw, f); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			pw.CloseWithError(err)
+		}
+	}()
+
+	return pr, nil
 }
 
 func (fsys dirFS) safePath(path string) (string, error) {
