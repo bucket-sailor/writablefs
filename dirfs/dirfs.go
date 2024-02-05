@@ -122,6 +122,11 @@ func (fsys dirFS) Archive(name string) (io.ReadCloser, error) {
 				return err
 			}
 
+			// Skip the root directory.
+			if file == path {
+				return nil
+			}
+
 			header, err := tar.FileInfoHeader(fi, "")
 			if err != nil {
 				return err
