@@ -10,6 +10,7 @@
 package test
 
 import (
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -255,4 +256,14 @@ func testXAttrs(t *testing.T, fsys writablefs.FS) {
 			}
 		})
 	})
+}
+
+func randomString(n int) string {
+	var letters = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_.")
+	s := make([]rune, n)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+
+	return string(s)
 }

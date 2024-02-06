@@ -3,7 +3,7 @@ module github.com/bucket-sailor/writablefs
 go 1.21.0
 
 require (
-	github.com/bucket-sailor/queue v0.3.0
+	github.com/bucket-sailor/queue v0.4.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/minio/minio-go/v7 v7.0.66
 	github.com/neilotoole/slogt v1.1.0

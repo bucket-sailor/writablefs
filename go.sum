@@ -10,6 +10,8 @@ github.com/Microsoft/hcsshim v0.11.4 h1:68vKo2VN8DE9AdN4tnkWnmdhqdbpUFM8OF3Airm7
 github.com/Microsoft/hcsshim v0.11.4/go.mod h1:smjE4dvqPX9Zldna+t5FG3rnoHhaB7QYxPRqGcpAD9w=
 github.com/bucket-sailor/queue v0.3.0 h1:J7dMUAAyEtg3vP0Kic9n2llDLOilVjsJuPw/qkTDDB8=
 github.com/bucket-sailor/queue v0.3.0/go.mod h1:/llzVcfvq1j4TMvDmqbEojjgKj4G5R8KOrt2pA0yNhA=
+github.com/bucket-sailor/queue v0.4.0 h1:LJ8IqgodS/heV402SpOALOWOSUuqOzWK833sVOcsylg=
+github.com/bucket-sailor/queue v0.4.0/go.mod h1:/llzVcfvq1j4TMvDmqbEojjgKj4G5R8KOrt2pA0yNhA=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=
 github.com/cenkalti/backoff/v4 v4.2.1/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/containerd/containerd v1.7.12 h1:+KQsnv4VnzyxWcfO9mlxxELaoztsDEjOuCMPAuPqgU0=

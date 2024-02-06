@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"testing"
 
 	"github.com/bucket-sailor/writablefs/dirfs"
@@ -50,7 +49,7 @@ func TestFilesystems(t *testing.T) {
 		// Test the filesystem
 		testBasicOperations(t, fsys)
 		testXAttrs(t, fsys)
-		testDirectoryArchive(t, fsys)
+		testArchive(t, fsys)
 	})
 
 	t.Run("S3 - SeaweedFS", func(t *testing.T) {
@@ -70,7 +69,7 @@ func TestFilesystems(t *testing.T) {
 		// Test the filesystem
 		testBasicOperations(t, fsys)
 		testXAttrs(t, fsys)
-		testDirectoryArchive(t, fsys)
+		testArchive(t, fsys)
 	})
 }
 
@@ -123,14 +122,4 @@ s3.configure -access_key=admin -secret_key=admin -buckets=test -user=admin -acti
 	endpointURL := fmt.Sprintf("http://%s:%s", dockerHost, s3Port.Port())
 
 	return ctr, endpointURL, nil
-}
-
-func randomString(n int) string {
-	var letters = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_.")
-	s := make([]rune, n)
-	for i := range s {
-		s[i] = letters[rand.Intn(len(letters))]
-	}
-
-	return string(s)
 }
