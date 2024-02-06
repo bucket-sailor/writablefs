@@ -72,8 +72,17 @@ type File interface {
 	io.Seeker
 	io.ReaderAt
 	io.WriterAt
+
+	// Sync flushes any changes to the file system.
 	Sync() error
+
+	// Truncate changes the size of the file.
 	Truncate(size int64) error
+
+	// XAttrs returns the extended attributes of the file.
+	// If the file system does not support extended attributes,
+	// an error is returned. You should call Sync() after modifying
+	// the extended attributes to ensure they are persisted.
 	XAttrs() (ExtendedAttributes, error)
 }
 
@@ -102,6 +111,7 @@ type FS interface {
 // This useful for dowloading whole directories etc.
 type ArchiveFS interface {
 	FS
-	// Archive creates a tarball of the file or directory at the given path.
+
+	// Archive creates a tar archive of the directory at the given path.
 	Archive(path string) (io.ReadCloser, error)
 }

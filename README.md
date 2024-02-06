@@ -1,6 +1,6 @@
 # writablefs
 
-A minimal superset of [fs.FS](https://pkg.go.dev/io/fs#FS) supporting write operations.
+A superset of [fs.FS](https://pkg.go.dev/io/fs#FS) supporting write operations.
 
 Inspired by [hackpadfs](https://github.com/hack-pad/hackpadfs), [rclone](https://github.com/rclone/rclone), and [s3fs](https://github.com/jszwec/s3fs).
 
