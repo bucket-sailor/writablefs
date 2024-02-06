@@ -371,7 +371,7 @@ func (fsys *s3FS) Stat(path string) (writablefs.FileInfo, error) {
 					return nil, objInfo.Err
 				}
 
-				if strings.TrimSuffix(objInfo.Key, "/") == gopath.Base(strings.TrimSuffix(key, "/")) {
+				if strings.TrimSuffix(objInfo.Key, "/") == strings.TrimSuffix(key, "/") {
 					fsys.logger.Debug("Found directory in parent", "key", key)
 
 					return &fileInfo{
