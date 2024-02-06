@@ -211,21 +211,21 @@ func (fsys *s3FS) ReadDir(path string) ([]writablefs.DirEntry, error) {
 	})
 
 	var entries []writablefs.DirEntry
-	for obj := range objCh {
-		if obj.Err != nil {
-			return nil, obj.Err
+	for objInfo := range objCh {
+		if objInfo.Err != nil {
+			return nil, objInfo.Err
 		}
 
 		// Skip the directory itself (not all S3 implementations will return it).
-		if obj.Key == key {
+		if objInfo.Key == key {
 			continue
 		}
 
 		entries = append(entries, &dirEntry{
-			name:    strings.TrimPrefix(obj.Key, key),
-			size:    obj.Size,
-			modTime: obj.LastModified,
-			isDir:   strings.HasSuffix(obj.Key, "/"),
+			name:    strings.TrimPrefix(objInfo.Key, key),
+			size:    objInfo.Size,
+			modTime: objInfo.LastModified,
+			isDir:   strings.HasSuffix(objInfo.Key, "/"),
 		})
 	}
 
@@ -279,16 +279,16 @@ func (fsys *s3FS) RemoveAll(path string) error {
 	go func() {
 		defer close(objToDeleteCh)
 
-		for obj := range objCh {
-			if obj.Err != nil {
+		for objInfo := range objCh {
+			if objInfo.Err != nil {
 				resultMu.Lock()
-				result = multierror.Append(result, obj.Err)
+				result = multierror.Append(result, objInfo.Err)
 				resultMu.Unlock()
 
 				continue
 			}
 
-			objToDeleteCh <- obj
+			objToDeleteCh <- objInfo
 		}
 	}()
 
@@ -351,31 +351,34 @@ func (fsys *s3FS) Stat(path string) (writablefs.FileInfo, error) {
 	info, err := fsys.client.StatObject(fsys.ctx, fsys.bucketName, key, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
-			fsys.logger.Debug("Attempting to get status of directory by listing parent", "key", key)
+			parentKey := parentKey(key)
+
+			fsys.logger.Debug("Attempting to get status of directory by listing parent",
+				"key", key, "parentKey", parentKey)
 
 			ctx, cancel := context.WithCancel(fsys.ctx)
 			defer cancel()
 
 			objCh := fsys.client.ListObjects(ctx, fsys.bucketName, minio.ListObjectsOptions{
-				Prefix:     parentKey(key),
+				Prefix:     parentKey,
 				Recursive:  false,
 				StartAfter: key,
 				MaxKeys:    1,
 			})
 
-			for obj := range objCh {
-				if obj.Err != nil {
-					return nil, obj.Err
+			for objInfo := range objCh {
+				if objInfo.Err != nil {
+					return nil, objInfo.Err
 				}
 
-				if strings.TrimSuffix(obj.Key, "/") == gopath.Base(strings.TrimSuffix(key, "/")) {
+				if strings.TrimSuffix(objInfo.Key, "/") == gopath.Base(strings.TrimSuffix(key, "/")) {
 					fsys.logger.Debug("Found directory in parent", "key", key)
 
 					return &fileInfo{
 						info: minio.ObjectInfo{
-							Key:          obj.Key,
-							LastModified: obj.LastModified,
-							Size:         obj.Size,
+							Key:          objInfo.Key,
+							LastModified: objInfo.LastModified,
+							Size:         objInfo.Size,
 						},
 					}, nil
 				}
