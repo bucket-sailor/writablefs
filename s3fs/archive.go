@@ -11,8 +11,7 @@ package s3fs
 
 import (
 	"archive/tar"
-	"bytes"
-	"context"
+	"fmt"
 	"io"
 	gopath "path"
 	"sort"
@@ -26,7 +25,7 @@ import (
 func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
 	const (
 		numConnections            = 20
-		largeObjectThresholdBytes = 100000000 // 100MB
+		largeObjectThresholdBytes = 32000000 // 32MB
 	)
 
 	key := toKey(name, true)
@@ -35,8 +34,6 @@ func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		tw := tar.NewWriter(pw)
-
 		objCh := fsys.client.ListObjects(fsys.ctx, fsys.bucketName, minio.ListObjectsOptions{
 			Prefix:    key,
 			Recursive: true,
@@ -45,30 +42,30 @@ func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
 		var objects []minio.ObjectInfo
 		directories := make(map[string]bool)
 
-		for obj := range objCh {
-			if obj.Err != nil {
-				pw.CloseWithError(obj.Err)
+		for objInfo := range objCh {
+			if objInfo.Err != nil {
+				pw.CloseWithError(objInfo.Err)
 				return
 			}
 
 			// Skip the directory itself (not all S3 implementations will return it).
-			if obj.Key == key {
+			if objInfo.Key == key {
 				continue
 			}
 
 			// Collect directories.
-			if strings.HasSuffix(obj.Key, "/") {
-				directories[strings.TrimSuffix(strings.TrimPrefix(obj.Key, key), "/")] = true
+			if strings.HasSuffix(objInfo.Key, "/") {
+				directories[strings.TrimSuffix(strings.TrimPrefix(objInfo.Key, key), "/")] = true
 				continue
 			}
 
-			dir := gopath.Dir(strings.TrimPrefix(obj.Key, key))
+			dir := gopath.Dir(strings.TrimPrefix(objInfo.Key, key))
 			for dir != "." && dir != "/" && !directories[dir] {
 				directories[dir] = true
 				dir = gopath.Dir(dir)
 			}
 
-			objects = append(objects, obj)
+			objects = append(objects, objInfo)
 		}
 
 		var dirPaths []string
@@ -77,6 +74,9 @@ func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
 		}
 
 		sort.Strings(dirPaths)
+
+		var writerMu sync.Mutex
+		tw := tar.NewWriter(pw)
 
 		// Add the directories up front so we can add files in arbitrary order.
 		for _, path := range dirPaths {
@@ -92,102 +92,95 @@ func (fsys *s3FS) Archive(name string) (io.ReadCloser, error) {
 			}
 		}
 
-		var writerMu sync.Mutex
-
 		q := queue.NewQueue(numConnections)
 
-		ctx, cancel := context.WithCancel(fsys.ctx)
+		for _, objInfo := range objects {
+			objInfo := objInfo
 
-		// Process the objects in parallel (this is important for small objects)
-		for i := range objects {
-			q.Add(func() {
-				obj := objects[i]
+			q.Add(func() error {
+				fsys.logger.Debug("Adding object to archive", "key", objInfo.Key)
 
-				rc, err := fsys.client.GetObject(ctx, fsys.bucketName, obj.Key, minio.GetObjectOptions{})
+				obj, err := fsys.client.GetObject(fsys.ctx, fsys.bucketName, objInfo.Key, minio.GetObjectOptions{})
 				if err != nil {
-					writerMu.Lock()
-					pw.CloseWithError(err)
-					writerMu.Unlock()
-					return
+					return err
 				}
+				defer obj.Close()
 
-				if obj.Size > largeObjectThresholdBytes {
-					defer rc.Close()
-
-					// Write the object to the tar.
+				if objInfo.Size > largeObjectThresholdBytes {
 					writerMu.Lock()
 					defer writerMu.Unlock()
 
 					hdr := &tar.Header{
-						Name:    strings.TrimPrefix(obj.Key, key),
-						Size:    obj.Size,
-						ModTime: obj.LastModified,
+						Name:    strings.TrimPrefix(objInfo.Key, key),
+						Size:    objInfo.Size,
+						ModTime: objInfo.LastModified,
 						Mode:    0o644,
 					}
 
 					if err := tw.WriteHeader(hdr); err != nil {
-						pw.CloseWithError(err)
-						return
+						return err
 					}
 
-					if _, err := io.Copy(tw, rc); err != nil {
-						pw.CloseWithError(err)
-						return
+					n, err := io.Copy(tw, obj)
+					if err != nil {
+						return err
+					}
+
+					if n != objInfo.Size {
+						return fmt.Errorf("unexpected size %d != %d for object %q: %w", n, objInfo.Size, objInfo.Key, io.ErrShortWrite)
 					}
 				} else {
-					// Read the object into a buffer (this let's us perform get object in parallel).
-					var buf bytes.Buffer
-					if _, err := io.Copy(&buf, rc); err != nil {
-						_ = rc.Close()
-						writerMu.Lock()
-						pw.CloseWithError(err)
-						writerMu.Unlock()
-						return
+					buf := make([]byte, objInfo.Size)
+					n, err := io.ReadFull(obj, buf)
+					if err != nil {
+						return err
 					}
 
-					_ = rc.Close()
+					if int64(n) != objInfo.Size {
+						return fmt.Errorf("unexpected size %d != %d for object %q: %w", n, objInfo.Size, objInfo.Key, io.ErrShortWrite)
+					}
 
-					// Write the object to the tar.
 					writerMu.Lock()
 					defer writerMu.Unlock()
 
 					hdr := &tar.Header{
-						Name:    strings.TrimPrefix(obj.Key, key),
-						Size:    obj.Size,
-						ModTime: obj.LastModified,
+						Name:    strings.TrimPrefix(objInfo.Key, key),
+						Size:    objInfo.Size,
+						ModTime: objInfo.LastModified,
 						Mode:    0o644,
 					}
 
 					if err := tw.WriteHeader(hdr); err != nil {
-						pw.CloseWithError(err)
-						return
+						return err
 					}
 
-					if _, err := io.Copy(tw, &buf); err != nil {
-						pw.CloseWithError(err)
-						return
+					n, err = tw.Write(buf)
+					if err != nil {
+						return err
+					}
+
+					if int64(n) != objInfo.Size {
+						return io.ErrShortWrite
 					}
 				}
+
+				return nil
 			})
 		}
 
-		// Stop the queue when the pipe is closed or an error occurs.
-		go func() {
-			if _, err := pr.Read(make([]byte, 0)); err != nil {
-				q.Clear()
-			}
-		}()
+		err := q.Wait()
+		if err != nil {
+			_ = tw.Close()
+			pw.CloseWithError(err)
+			return
+		}
 
-		// Close the pipe when the queue is done.
-		go func() {
-			<-q.Idle()
+		if err := tw.Close(); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
 
-			tw.Close()
-
-			pw.Close()
-
-			cancel()
-		}()
+		pw.Close()
 	}()
 
 	return pr, nil

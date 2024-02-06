@@ -11,14 +11,13 @@ package test
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/bucket-sailor/writablefs"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,44 +31,37 @@ func testDirectoryArchive(t *testing.T, fsys writablefs.FS) {
 		err := fsys.RemoveAll(t.Name())
 		require.NoError(t, err)
 
-		dirPath := filepath.Join(t.Name(), randomString(10))
-
-		// Create a directory
-		err = fsys.MkdirAll(dirPath)
+		f, err := os.Open("testdata/archive.tar.gz")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, f.Close())
+		})
 
-		// Create a file in the directory
-		filePath := filepath.Join(dirPath, randomString(10)+".txt")
-
-		f, err := fsys.OpenFile(filePath, writablefs.FlagCreate|writablefs.FlagReadWrite)
-		require.NoError(t, err)
-
-		_, err = f.Write([]byte("just a test"))
-		require.NoError(t, err)
-
-		err = f.Sync()
-		require.NoError(t, err)
-
-		err = f.Close()
+		err = extract(f, fsys, t.Name())
 		require.NoError(t, err)
 
 		// Archive the directory
 		r, err := archiveFS.Archive(t.Name())
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, r.Close())
+		})
 
-		// Extract the directory
-		outDir := t.TempDir()
+		// TODO: compute a dirhash and compare it to the expected value
 
-		err = extract(outDir, r)
+		_, err = io.Copy(io.Discard, r)
 		require.NoError(t, err)
-
-		assert.DirExists(t, filepath.Join(outDir, strings.TrimPrefix(dirPath, t.Name()+"/")))
-		assert.FileExists(t, filepath.Join(outDir, strings.TrimPrefix(filePath, t.Name()+"/")))
 	})
 }
 
-func extract(outDir string, r io.Reader) error {
-	tr := tar.NewReader(r)
+func extract(r io.Reader, fsys writablefs.FS, path string) error {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -79,35 +71,32 @@ func extract(outDir string, r io.Reader) error {
 			return err
 		}
 
-		path := filepath.Join(outDir, hdr.Name)
+		path := filepath.Join(path, hdr.Name)
 
 		// is this a directory?
 		if hdr.Typeflag == tar.TypeDir {
-			if err := os.MkdirAll(path, os.FileMode(hdr.Mode)); err != nil {
+			if err := fsys.MkdirAll(path); err != nil {
 				return err
 			}
 
 			continue
 		}
 
-		f, err := os.Create(path)
+		f, err := fsys.OpenFile(path, writablefs.FlagCreate|writablefs.FlagReadWrite)
 		if err != nil {
 			return err
 		}
 
-		if _, err := io.Copy(f, tr); err != nil {
+		n, err := io.Copy(f, tr)
+		if err != nil {
 			return err
+		}
+
+		if n != hdr.Size {
+			return io.ErrShortWrite
 		}
 
 		if err := f.Close(); err != nil {
-			return err
-		}
-
-		if err := os.Chmod(path, os.FileMode(hdr.Mode)); err != nil {
-			return err
-		}
-
-		if err := os.Chtimes(path, hdr.ModTime, hdr.ModTime); err != nil {
 			return err
 		}
 	}

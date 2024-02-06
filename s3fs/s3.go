@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -152,19 +151,6 @@ func (fsys *s3FS) Open(path string) (writablefs.FileReadOnly, error) {
 }
 
 func (fsys *s3FS) OpenFile(path string, flag writablefs.FileOpenFlag) (writablefs.File, error) {
-	var nonEmpty bool
-	if _, err := fsys.Stat(path); err != nil {
-		if errors.Is(err, writablefs.ErrNotExist) {
-			if !flag.IsSet(writablefs.FlagCreate) {
-				return nil, writablefs.ErrNotExist
-			}
-		} else {
-			return nil, err
-		}
-	} else {
-		nonEmpty = true
-	}
-
 	fsys.filesMu.Lock()
 	f, ok := fsys.files[path]
 	if !ok {
@@ -182,7 +168,7 @@ func (fsys *s3FS) OpenFile(path string, flag writablefs.FileOpenFlag) (writablef
 	}
 	fsys.filesMu.Unlock()
 
-	return f.newHandle(flag.IsSet(writablefs.FlagReadOnly), nonEmpty)
+	return f.newHandle(flag)
 }
 
 func (fsys *s3FS) MkdirAll(path string) error {

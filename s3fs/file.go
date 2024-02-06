@@ -42,9 +42,11 @@ type file struct {
 }
 
 // newHandle creates a new handle for this file.
-func (f *file) newHandle(readOnly, nonEmpty bool) (*fileHandle, error) {
+func (f *file) newHandle(flag writablefs.FileOpenFlag) (*fileHandle, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	readOnly := flag.IsSet(writablefs.FlagReadOnly)
 
 	if !readOnly && f.stagingFile == nil {
 		f.fsys.logger.Debug("Creating staging file", "key", f.key)
@@ -59,16 +61,20 @@ func (f *file) newHandle(readOnly, nonEmpty bool) (*fileHandle, error) {
 			return nil, err
 		}
 
-		if nonEmpty {
-			f.fsys.logger.Debug("Downloading existing object into staging file", "key", f.key)
+		f.fsys.logger.Debug("Attempting to download existing object into staging file", "key", f.key)
 
-			obj, err := f.fsys.client.GetObject(f.fsys.ctx, f.fsys.bucketName, f.key, minio.GetObjectOptions{})
-			if err != nil {
-				return nil, err
-			}
-			defer obj.Close()
+		obj, err := f.fsys.client.GetObject(f.fsys.ctx, f.fsys.bucketName, f.key, minio.GetObjectOptions{})
+		if err != nil {
+			return nil, err
+		}
+		defer obj.Close()
 
-			if _, err = io.Copy(f.stagingFile, obj); err != nil {
+		if _, err = io.Copy(f.stagingFile, obj); err != nil {
+			if minio.ToErrorResponse(err).Code == "NoSuchKey" && flag.IsSet(writablefs.FlagCreate) {
+				// If the object doesn't exist, that's fine.
+				f.fsys.logger.Debug("Creating new object", "key", f.key)
+				f.dirty = true
+			} else {
 				return nil, err
 			}
 		}
